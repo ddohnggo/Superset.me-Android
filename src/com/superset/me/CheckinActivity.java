@@ -2,12 +2,14 @@ package com.superset.me;
 
 import android.location.Geocoder;
 import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -70,15 +72,64 @@ public class CheckinActivity extends Activity {
         }
         
         // Get user location here
+        
         locationText = (TextView)this.findViewById(R.id.lblLocationInfo);
         locationManager = (LocationManager)this.getSystemService(LOCATION_SERVICE); //<2>
+        /**
         geocoder = new Geocoder(this); //<3>
-        Location location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER); //<5>
+        Location location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER); //<5> 
         
-        // If location not null, then update view
-        this.locationText.setText("I have changed this text label" + location.toString());
+        if (location != null) {
+            this.onLocationChanged(location); //<6>
+        }else{
+        	this.locationText.setText("Cannot find current location");
+        }
+        
+        final boolean gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
+
+        if (!gpsEnabled) {
+            this.locationText.setText("GPS Not Enabled");
+        }**/
+        
     }
     
+    
+  //Start a location listener
+  LocationListener onLocationChange=new LocationListener() {
+        public void onLocationChanged(Location loc) {
+            //sets and displays the lat/long when a location is provided
+            String latlong = "Lat: " + loc.getLatitude() + " Long: " + loc.getLongitude();   
+            locationText.setText(latlong);
+        }
+         
+        public void onProviderDisabled(String provider) {
+        // required for interface, not used
+        }
+         
+        public void onProviderEnabled(String provider) {
+        // required for interface, not used
+        }
+         
+        public void onStatusChanged(String provider, int status,
+        Bundle extras) {
+        // required for interface, not used
+        }
+   };
+    
+   //pauses listener while app is inactive
+   @Override
+   public void onPause() {
+       super.onPause();
+       locationManager.removeUpdates(onLocationChange);
+   }
+   
+   //reactivates listener when app is resumed
+   @Override
+   public void onResume() {
+       super.onResume();
+       locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER,0,10000.0f,onLocationChange);
+   }
+   
     @Override
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -91,7 +142,7 @@ public class CheckinActivity extends Activity {
         getMenuInflater().inflate(R.menu.activity_checkin, menu);
         return true;
     }
-
+    
     /**
      *  
      * @param view
