@@ -1,0 +1,9 @@
+<resources>
+
+    <string name="app_name">Superset.me</string>
+    <string name="hello_world">Hello world!</string>
+    <string name="menu_settings">Settings</string>
+    <string name="title_activity_checkin">Checkin</string>
+    <string name="button_checkin">Checkin</string>
+
+</resources>
