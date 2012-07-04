@@ -1,18 +1,29 @@
 package com.superset.me;
 
-import android.location.Geocoder;
+import java.io.IOException;
+import java.net.MalformedURLException;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.app.ActionBar;
 import android.app.Activity;
 import android.app.ProgressDialog;
+import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
 import android.view.Menu;
+import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.ArrayAdapter;
+import android.widget.ListView;
 import android.widget.TextView;
 import android.support.v4.app.NavUtils;
 import com.facebook.android.*;
@@ -26,12 +37,15 @@ public class CheckinActivity extends Activity {
 	
 	TextView locationText;
 	LocationManager locationManager; //<2>
-	Geocoder geocoder; //<3>
 	
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_checkin);
+
+        // Setup Menu
+        ActionBar actionBar = getActionBar();
+        actionBar.show();
         
         /*
          * Get existing access_token if any
@@ -51,7 +65,7 @@ public class CheckinActivity extends Activity {
          */
         if(!facebook.isSessionValid()) {
 
-            facebook.authorize(this, new String[] {}, new DialogListener() {
+            facebook.authorize(this, new String[] {"user_interests", "friends_interests"}, new DialogListener() {
                 @Override
                 public void onComplete(Bundle values) {
                     SharedPreferences.Editor editor = mPrefs.edit();
@@ -75,24 +89,8 @@ public class CheckinActivity extends Activity {
         
         locationText = (TextView)this.findViewById(R.id.lblLocationInfo);
         locationManager = (LocationManager)this.getSystemService(LOCATION_SERVICE); //<2>
-        /**
-        geocoder = new Geocoder(this); //<3>
-        Location location = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER); //<5> 
-        
-        if (location != null) {
-            this.onLocationChanged(location); //<6>
-        }else{
-        	this.locationText.setText("Cannot find current location");
-        }
-        
-        final boolean gpsEnabled = locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER);
-
-        if (!gpsEnabled) {
-            this.locationText.setText("GPS Not Enabled");
-        }**/
         
     }
-    
     
   //Start a location listener
   LocationListener onLocationChange=new LocationListener() {
@@ -100,6 +98,65 @@ public class CheckinActivity extends Activity {
             //sets and displays the lat/long when a location is provided
             String latlong = "Lat: " + loc.getLatitude() + " Long: " + loc.getLongitude();   
             locationText.setText(latlong);
+            
+            // Query Facebook API for nearby places
+            double lat = loc.getLatitude();
+            double lon = loc.getLongitude();
+            
+            Bundle params = new Bundle();
+            params.putString("method", "fql.query");
+            //Build Query String
+            params.putString("query", "SELECT page_id, name, description, latitude, longitude, checkin_count, distance(latitude, longitude, '" + lat + "', '" + lon
+                    + "') FROM place WHERE distance(latitude, longitude, '" + lat + "', '" + lon + "') < "+ 1000);
+            //locationText.setText(params.toString());
+            
+            // Get Facebook locations and print to screen
+            ListView listView = (ListView) findViewById(R.id.placeList);
+            String[] values = new String[] { "Place 1", "Place 2", "Place 3",
+            	"Place 4", "Place 5", "Place 6", "Place 7", "Place 8",
+            	"Place 9", "Place 10" };
+            
+            ArrayAdapter<String> adapter = new ArrayAdapter<String>(CheckinActivity.this, android.R.layout.simple_list_item_1, values);
+            listView.setAdapter(adapter);
+            /**
+            try {
+				JSONObject response = Util.parseJson(facebook.request("me/friends"));
+				JSONArray jArray = response.getJSONArray("data");
+				
+				JSONObject json_data = jArray.getJSONObject(0);
+		        String name = json_data.getString("name");
+		        
+		        locationText.setText(name);
+
+			} catch (FacebookError e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (MalformedURLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (JSONException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}**/
+            
+            /**
+            String response = null;
+            
+            try {
+				response = facebook.request(params);
+			} catch (MalformedURLException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}**/
+			
+            //locationText.setText(response.toString());
+			
         }
          
         public void onProviderDisabled(String provider) {
@@ -143,15 +200,17 @@ public class CheckinActivity extends Activity {
         return true;
     }
     
-    /**
-     *  
-     * @param view
-     * 
-     * The following function is called when a Checkin is desired
-     * Send to both Parse and Facebook Open Graph
-     */
-    public void sendCheckin(View view){
-    	
-    	
+    @Override
+    public boolean onOptionsItemSelected(MenuItem item) {
+        switch (item.getItemId()) {
+            case R.id.item_feed:	Intent intentItem1 = new Intent(this, FeedActivity.class);
+									startActivityForResult(intentItem1, 0);
+									return true;
+            case R.id.item_friends:	Intent intentItem2 = new Intent(this, FeedActivity.class);
+									startActivityForResult(intentItem2, 0);
+									return true;
+        }
+        return true;
     }
+        
 }
