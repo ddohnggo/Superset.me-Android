@@ -7,22 +7,28 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import com.parse.Parse;
+import com.parse.ParseObject;
+
 import android.location.Location;
 import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
+import android.os.Handler;
 import android.app.ActionBar;
 import android.app.Activity;
 import android.app.ProgressDialog;
-import android.content.DialogInterface.OnClickListener;
+import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
-import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
+import android.widget.BaseAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.support.v4.app.NavUtils;
@@ -31,25 +37,40 @@ import com.facebook.android.Facebook.*;
 
 public class CheckinActivity extends Activity {
 	
+	// Global Variables
+	private String name;
+	private String id;
+	private ParseObject parseLogin;
+	private Handler mHandler;
+	private Place[] nearbyPlaces;
+	
+	// Facebook Initialization
 	Facebook facebook = new Facebook("440227432655382");
+	AsyncFacebookRunner asyncRunner = new AsyncFacebookRunner(facebook);
 	private SharedPreferences mPrefs;
 	protected ProgressDialog dialog;
 	
-	TextView locationText;
+	// UI Variables
+	ListView listView;
 	LocationManager locationManager; //<2>
+	protected static JSONArray jsonArray;
 	
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_checkin);
-
+        
+        Parse.initialize(this, "BMhCXvRBibv30AHIzmorrqWa2xyaiWzhoMENuLw9", "O5YWKO78cE7iNqkpXHODHMDIs6WhmKQ5ZBBmriWo");
+        mHandler = new Handler();
+        
         // Setup Menu
         ActionBar actionBar = getActionBar();
         actionBar.show();
         
-        /*
-         * Get existing access_token if any
-         */
+        // Initialize Parse Login 
+        parseLogin = new ParseObject("Login");
+        
+        // Get existing Access Token if necessary
         mPrefs = getPreferences(MODE_PRIVATE);
         String access_token = mPrefs.getString("access_token", null);
         long expires = mPrefs.getLong("access_expires", 0);
@@ -60,12 +81,11 @@ public class CheckinActivity extends Activity {
             facebook.setAccessExpires(expires);
         }
         
-        /*
-         * Only call authorize if the access_token has expired.
-         */
+        
+        //Only call authorize if the access_token has expired.
         if(!facebook.isSessionValid()) {
-
-            facebook.authorize(this, new String[] {"user_interests", "friends_interests"}, new DialogListener() {
+        	Log.i("Session is Not Valid","Session is Not Valid");
+            facebook.authorize(this, new String[] {"email", "user_interests", "friends_interests"}, new DialogListener() {
                 @Override
                 public void onComplete(Bundle values) {
                     SharedPreferences.Editor editor = mPrefs.edit();
@@ -85,80 +105,25 @@ public class CheckinActivity extends Activity {
             });
         }
         
-        // Get user location here
         
-        locationText = (TextView)this.findViewById(R.id.lblLocationInfo);
+        // Initialize UI and system variables
         locationManager = (LocationManager)this.getSystemService(LOCATION_SERVICE); //<2>
         
+        // Request User Information
+        asyncRunner.request("me", new UserRequestListener());
+
     }
-    
+
   //Start a location listener
   LocationListener onLocationChange=new LocationListener() {
         public void onLocationChanged(Location loc) {
-            //sets and displays the lat/long when a location is provided
-            String latlong = "Lat: " + loc.getLatitude() + " Long: " + loc.getLongitude();   
-            locationText.setText(latlong);
-            
             // Query Facebook API for nearby places
             double lat = loc.getLatitude();
             double lon = loc.getLongitude();
             
-            Bundle params = new Bundle();
-            params.putString("method", "fql.query");
-            //Build Query String
-            params.putString("query", "SELECT page_id, name, description, latitude, longitude, checkin_count, distance(latitude, longitude, '" + lat + "', '" + lon
-                    + "') FROM place WHERE distance(latitude, longitude, '" + lat + "', '" + lon + "') < "+ 1000);
-            //locationText.setText(params.toString());
-            
-            // Get Facebook locations and print to screen
-            ListView listView = (ListView) findViewById(R.id.placeList);
-            String[] values = new String[] { "Place 1", "Place 2", "Place 3",
-            	"Place 4", "Place 5", "Place 6", "Place 7", "Place 8",
-            	"Place 9", "Place 10" };
-            
-            ArrayAdapter<String> adapter = new ArrayAdapter<String>(CheckinActivity.this, android.R.layout.simple_list_item_1, values);
-            listView.setAdapter(adapter);
-            /**
-            try {
-				JSONObject response = Util.parseJson(facebook.request("me/friends"));
-				JSONArray jArray = response.getJSONArray("data");
-				
-				JSONObject json_data = jArray.getJSONObject(0);
-		        String name = json_data.getString("name");
-		        
-		        locationText.setText(name);
-
-			} catch (FacebookError e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (MalformedURLException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (JSONException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}**/
-            
-            /**
-            String response = null;
-            
-            try {
-				response = facebook.request(params);
-			} catch (MalformedURLException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			} catch (IOException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
-			}**/
-			
-            //locationText.setText(response.toString());
-			
+            fetchPlaces(lat, lon);
         }
-         
+        
         public void onProviderDisabled(String provider) {
         // required for interface, not used
         }
@@ -171,8 +136,19 @@ public class CheckinActivity extends Activity {
         Bundle extras) {
         // required for interface, not used
         }
+        
+        public void fetchPlaces(double lat, double lon){
+     	   Bundle params = new Bundle();
+     	   params.putString("q", "Equinox");
+           params.putString("type", "place");
+           params.putString("center", lat + "," + lon);
+           params.putString("distance", "10000");
+            
+            asyncRunner.request("search", params, new PlacesRequestListener());
+        }
    };
-    
+   
+   
    //pauses listener while app is inactive
    @Override
    public void onPause() {
@@ -203,14 +179,109 @@ public class CheckinActivity extends Activity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
-            case R.id.item_feed:	Intent intentItem1 = new Intent(this, FeedActivity.class);
-									startActivityForResult(intentItem1, 0);
-									return true;
-            case R.id.item_friends:	Intent intentItem2 = new Intent(this, FeedActivity.class);
-									startActivityForResult(intentItem2, 0);
-									return true;
+            case R.id.item_feed:	break;
+            case R.id.item_friends:	break;
         }
         return true;
     }
+    
+    
+    /** 
+     * @author mrood
+     *
+     * Request data from Facebook
+     */
+    public class UserRequestListener extends BaseRequestListener {
+
+        public void onComplete(final String response, final Object state) {
+            try {
+                // process the response here: executed in background thread
+                Log.d("Facebook-Example", "Response: " + response.toString());
+                JSONObject json = Util.parseJson(response);
+                name = json.getString("name");
+                id = json.getString("id");
+
+                // then post the processed result back to the UI thread
+                // if we do not do this, an runtime exception will be generated
+                // e.g. "CalledFromWrongThreadException: Only the original
+                // thread that created a view hierarchy can touch its views."
+                CheckinActivity.this.runOnUiThread(new Runnable() {
+                    public void run() {
+                    	// Log user into Login table
+                    	parseLogin.put("userid", id);
+                    	parseLogin.saveInBackground();
+                    }
+                });
+            } catch (JSONException e) {
+                Log.w("Facebook-Example", "JSON Error in response");
+            } catch (FacebookError e) {
+                Log.w("Facebook-Example", "Facebook Error: " + e.getMessage());
+            }
+        }
+    }
+    
+    /** 
+     * @author mrood
+     *
+     * Request data from Facebook
+     */
+    public class PlacesRequestListener extends BaseRequestListener {
+
+        public void onComplete(final String response, final Object state) {
+        	// process the response here: executed in background thread
+        	Log.d("Facebook-FbAPIs", "Got response: " + response);
+        	
+        	try {
+                jsonArray = new JSONObject(response).getJSONArray("data");
+                if (jsonArray == null) {
+                	Log.d("Facebook-FbAPIs","Error: jsonArray is null");
+                    return;
+                }
+            } catch (JSONException e) {
+            	Log.d("Facebook-FbAPIs","Error: jsonArray exception");
+                return;
+            }
+        	
+        	
+        	mHandler.post(new Runnable() {
+                @Override
+                public void run() {
+                    listView = (ListView) findViewById(R.id.placeList);
+                    nearbyPlaces = new Place[jsonArray.length()];
+                    String placeNames[] = new String[jsonArray.length()];
+                    
+                    JSONObject jsonObject = null;
+                    String id;
+                    String name;
+                    
+                    for(int i=0; i<jsonArray.length(); i++){
+                    	
+                    	try {
+							jsonObject = jsonArray.getJSONObject(i);
+							name = jsonObject.getString("name");
+							id = jsonObject.getString("id");
+							nearbyPlaces[i] = new Place(id, name);
+							placeNames[i] = name;
+							
+							Log.d("Facebook-APIs","New Place" + nearbyPlaces[i].getId() + ":" + nearbyPlaces[i].getName());
+						} catch (JSONException e) {
+							// TODO Auto-generated catch block
+							e.printStackTrace();
+						}	
+                    	
+                    }
+                    
+                    ArrayAdapter<String> adapter = new ArrayAdapter<String>(CheckinActivity.this, android.R.layout.simple_list_item_1, placeNames);
+                    listView.setAdapter(adapter);
+                    //listView.setOnItemClickListener(CheckinActivity.this);
+                    //listView.setAdapter(new PlacesListAdapter(CheckinActivity.this));
+                }
+            });
+        	
+        }
+        
+    }
         
 }
+
+
