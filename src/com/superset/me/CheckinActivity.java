@@ -19,6 +19,8 @@ import android.app.ActionBar;
 import android.app.Activity;
 import android.app.ProgressDialog;
 import android.content.Context;
+import android.content.DialogInterface;
+import android.content.DialogInterface.OnClickListener;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.util.Log;
@@ -27,6 +29,8 @@ import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.AdapterView;
+import android.widget.AdapterView.OnItemClickListener;
 import android.widget.ArrayAdapter;
 import android.widget.BaseAdapter;
 import android.widget.ListView;
@@ -38,9 +42,10 @@ import com.facebook.android.Facebook.*;
 public class CheckinActivity extends Activity {
 	
 	// Global Variables
-	private String name;
-	private String id;
+	static String name;
+	static String id;
 	private ParseObject parseLogin;
+	private ParseObject parseCheckin;
 	private Handler mHandler;
 	private Place[] nearbyPlaces;
 	
@@ -64,11 +69,12 @@ public class CheckinActivity extends Activity {
         mHandler = new Handler();
         
         // Setup Menu
-        ActionBar actionBar = getActionBar();
-        actionBar.show();
+        //ActionBar actionBar = getActionBar();
+        //actionBar.show();
         
         // Initialize Parse Login 
         parseLogin = new ParseObject("Login");
+        parseCheckin = new ParseObject("Checkin");
         
         // Get existing Access Token if necessary
         mPrefs = getPreferences(MODE_PRIVATE);
@@ -85,7 +91,7 @@ public class CheckinActivity extends Activity {
         //Only call authorize if the access_token has expired.
         if(!facebook.isSessionValid()) {
         	Log.i("Session is Not Valid","Session is Not Valid");
-            facebook.authorize(this, new String[] {"email", "user_interests", "friends_interests"}, new DialogListener() {
+            facebook.authorize(this, new String[] {"publish_stream","publish_actions"}, new DialogListener() {
                 @Override
                 public void onComplete(Bundle values) {
                     SharedPreferences.Editor editor = mPrefs.edit();
@@ -139,12 +145,12 @@ public class CheckinActivity extends Activity {
         
         public void fetchPlaces(double lat, double lon){
      	   Bundle params = new Bundle();
-     	   params.putString("q", "Equinox");
+     	   params.putString("q", "equinox");
            params.putString("type", "place");
            params.putString("center", lat + "," + lon);
-           params.putString("distance", "10000");
+           params.putString("distance", "1000");
             
-            asyncRunner.request("search", params, new PlacesRequestListener());
+           asyncRunner.request("search", params, new PlacesRequestListener());
         }
    };
    
@@ -248,11 +254,12 @@ public class CheckinActivity extends Activity {
                 public void run() {
                     listView = (ListView) findViewById(R.id.placeList);
                     nearbyPlaces = new Place[jsonArray.length()];
-                    String placeNames[] = new String[jsonArray.length()];
                     
                     JSONObject jsonObject = null;
                     String id;
                     String name;
+                    
+                    ArrayAdapter<String> adapter = new ArrayAdapter<String>(CheckinActivity.this, android.R.layout.simple_list_item_1);
                     
                     for(int i=0; i<jsonArray.length(); i++){
                     	
@@ -261,8 +268,8 @@ public class CheckinActivity extends Activity {
 							name = jsonObject.getString("name");
 							id = jsonObject.getString("id");
 							nearbyPlaces[i] = new Place(id, name);
-							placeNames[i] = name;
 							
+							adapter.add(name);
 							Log.d("Facebook-APIs","New Place" + nearbyPlaces[i].getId() + ":" + nearbyPlaces[i].getName());
 						} catch (JSONException e) {
 							// TODO Auto-generated catch block
@@ -271,16 +278,54 @@ public class CheckinActivity extends Activity {
                     	
                     }
                     
-                    ArrayAdapter<String> adapter = new ArrayAdapter<String>(CheckinActivity.this, android.R.layout.simple_list_item_1, placeNames);
                     listView.setAdapter(adapter);
-                    //listView.setOnItemClickListener(CheckinActivity.this);
-                    //listView.setAdapter(new PlacesListAdapter(CheckinActivity.this));
+                    listView.setOnItemClickListener(new ListItemListener());
                 }
             });
         	
         }
         
     }
+    
+    
+    
+    public class ListItemListener implements OnItemClickListener {
+    	
+		@Override
+		public void onItemClick(AdapterView<?> arg0, View listview, int position, long id) {
+			Log.d("Facebook-APIs", "Item Click: " + nearbyPlaces[position].getId() + " : " + nearbyPlaces[position].getName());
+			
+			// Write Checkin to Parse
+			parseCheckin.put("userid", Integer.parseInt(CheckinActivity.id));
+			parseCheckin.put("actionid", "0001");
+			parseCheckin.put("placeid", nearbyPlaces[position].getId());
+			parseCheckin.put("placename", nearbyPlaces[position].getName());
+			
+			parseCheckin.saveInBackground();
+			
+			//Share on Facebook
+			
+			Bundle params = new Bundle();
+	     	params.putString("workout", "http://daves.fbdublin.com/workout.php?title=Equinox Workout"+"&description="+CheckinActivity.name+" just crushed a workout at "+nearbyPlaces[position].getName()+" using Superset.me");
+	        params.putString("place", nearbyPlaces[position].getId());
+	        
+			asyncRunner.request("me/superset:crush", params, "POST", new CheckinRequestListener(), null);
+			
+		}
+    	
+    }
+    
+    public class CheckinRequestListener extends BaseRequestListener {
+
+		@Override
+		public void onComplete(String response, Object state) {
+			// TODO Auto-generated method stub
+			//Log.d("Facebook-FbAPIs", "Got response: " + response);
+		}
+    	
+    }
+    
+    
         
 }
 
