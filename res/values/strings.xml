@@ -2,7 +2,7 @@
 
     <string name="app_name">Superset.me</string>
     <string name="hello_world">Hello world!</string>
-    <string name="title_activity_checkin"></string>
+    <string name="title_activity_checkin">Superset.me</string>
 	<string name="title_activity_feed"></string>
 	<string name="title_activity_friends"></string>
 </resources>
