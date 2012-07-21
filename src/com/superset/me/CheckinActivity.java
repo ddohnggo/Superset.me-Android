@@ -2,12 +2,17 @@ package com.superset.me;
 
 
 
+import java.util.List;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import com.parse.FindCallback;
 import com.parse.Parse;
+import com.parse.ParseException;
 import com.parse.ParseObject;
+import com.parse.ParseQuery;
 
 import android.location.Criteria;
 import android.location.Location;
@@ -35,16 +40,21 @@ import com.facebook.android.Facebook.*;
 public class CheckinActivity extends Activity {
 	
 	// Global Variables
-	static String name;					//user name
-	static String id;					//user id
-	private ParseObject parseLogin;		//parse login table
-	private ParseObject parseCheckin;	//parse checkin table
-	private Handler mHandler;			
+	public static String name;					//user name
+	public static String id;					//user id
+	public static String user_rank;				//user rank
+	public Utility utility;
+	
+	public static ParseObject parseUser;		//parse User table
+	public static ParseObject parseLogin;		//parse login table
+	public static ParseObject parseCheckin;		//parse checkin table
+	
+	private Handler mHandler;
 	private Place[] nearbyPlaces;		//holds an array of Places
 	
 	// Facebook Initialization
-	Facebook facebook = new Facebook("440227432655382");					//Initiate Facebook
-	AsyncFacebookRunner asyncRunner = new AsyncFacebookRunner(facebook);	//Make Facebook Asyncronous
+	public static Facebook facebook = new Facebook("440227432655382");					//Initiate Facebook
+	public static AsyncFacebookRunner asyncRunner = new AsyncFacebookRunner(facebook);	//Make Facebook Asyncronous
 	private SharedPreferences mPrefs;										
 	protected ProgressDialog dialog;										
 	
@@ -58,6 +68,9 @@ public class CheckinActivity extends Activity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_checkin);
+        
+        // Initialize Utility
+        this.utility = new Utility();
         
         // Initialize Parse
         Parse.initialize(this, "BMhCXvRBibv30AHIzmorrqWa2xyaiWzhoMENuLw9", "O5YWKO78cE7iNqkpXHODHMDIs6WhmKQ5ZBBmriWo");
@@ -82,7 +95,7 @@ public class CheckinActivity extends Activity {
         //Only call authorize if the access_token has expired.
         if(!facebook.isSessionValid()) {
         	Log.i("Session is Not Valid","Session is Not Valid");
-            facebook.authorize(this, new String[] {"publish_stream","publish_actions"}, new DialogListener() {
+            facebook.authorize(this, new String[] {"publish_actions"}, new DialogListener() {
                 @Override
                 public void onComplete(Bundle values) {
                     SharedPreferences.Editor editor = mPrefs.edit();
@@ -126,7 +139,7 @@ public class CheckinActivity extends Activity {
                 criteria.setAccuracy(Criteria.ACCURACY_COARSE);
                 String provider = locationManager.getBestProvider(criteria, true);
                 if (provider != null && locationManager.isProviderEnabled(provider)) {
-                    locationManager.requestLocationUpdates(provider, 1, 0, locationListener,
+                    locationManager.requestLocationUpdates(provider, 35000, 10, locationListener,
                             Looper.getMainLooper());
                 }
                 Looper.loop();
@@ -199,7 +212,10 @@ public class CheckinActivity extends Activity {
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         switch (item.getItemId()) {
-            case R.id.item_feed:	break;
+            case R.id.item_feed:	
+            	final Intent myIntent = new Intent(getApplicationContext(), FeedActivity.class);
+            	startActivity(myIntent);
+            	break;
             case R.id.item_friends:	break;
         }
         return true;
@@ -227,9 +243,15 @@ public class CheckinActivity extends Activity {
                 // thread that created a view hierarchy can touch its views."
                 CheckinActivity.this.runOnUiThread(new Runnable() {
                     public void run() {
-                    	// Log user into Login table
+                    	String test = utility.getRank(Integer.parseInt(id));
+                    	
+                    	Log.d("rank", "User rank is: " + test);
+                    	
+                    	utility.updateRank(Integer.parseInt(id));
+                    	
                     	parseLogin.put("userid", id);
                     	parseLogin.saveInBackground();
+                    	
                     }
                 });
             } catch (JSONException e) {
